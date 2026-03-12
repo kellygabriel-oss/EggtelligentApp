@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>EggTelligent — Eggcelsiur Network Map</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka+One&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --forest:#1B4332; --canopy:#2D6A4F; --leaf:#40916C;
+    --moss:#52B788; --mist:#B7E4C7; --parchment:#F0F4EF;
+    --amber:#E9A319; --amber-lt:#FFF8E1; --cream:#FEFCF0;
+    --panel-bg:#ffffff;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    font-family:'Nunito', sans-serif;
+    background:var(--parchment);
+    height:100vh; display:flex; flex-direction:column; overflow:hidden;
+  }
+
+  /* ── HEADER ── */
+  #header {
+    background:linear-gradient(135deg, var(--forest) 0%, var(--canopy) 60%, var(--leaf) 100%);
+    padding:10px 14px; display:flex; align-items:center; justify-content:space-between;
+    flex-shrink:0; position:relative; overflow:hidden;
+  }
+  #header::before {
+    content:''; position:absolute; inset:0;
+    background:url("data:image/svg+xml,%3Csvg width='40' height='40' viewBox='0 0 40 40' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%23ffffff' fill-opacity='0.04'%3E%3Cpath d='M20 20c0-5.5-4.5-10-10-10S0 14.5 0 20s4.5 10 10 10 10-4.5 10-10zm10 0c0 5.5 4.5 10 10 10s10-4.5 10-10-4.5-10-10-10-10 4.5-10 10z'/%3E%3C/g%3E%3C/svg%3E");
+  }
+  .header-title {
+    font-family:'Fredoka One', cursive;
+    font-size:18px; color:#fff; letter-spacing:1px; position:relative;
+  }
+  .header-subtitle {
+    font-size:9px; color:var(--mist); font-weight:700;
+    letter-spacing:1.5px; margin-top:2px; position:relative;
+    text-transform:uppercase;
+  }
+  .network-status {
+    display:flex; align-items:center; gap:6px;
+    font-size:10px; color:#fff; font-weight:800; letter-spacing:0.5px;
+  }
+  .pulse-dot {
+    width:9px; height:9px; background:var(--amber);
+    border-radius:50%; animation:pulse 1.8s ease-in-out infinite;
+    box-shadow:0 0 8px var(--amber); flex-shrink:0;
+  }
+  @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.5;transform:scale(0.75)} }
+
+  /* ── MAP ── */
+  #map-wrapper { flex:1; position:relative; overflow:hidden; min-height:0; }
+  #map { width:100%; height:100%; }
+
+  /* ── LEAFLET POPUP — bright fun style ── */
+  .leaflet-popup-content-wrapper {
+    background:#fffffff5;
+    border:2px solid var(--mist);
+    border-radius:14px;
+    box-shadow:0 4px 20px rgba(27,67,50,0.18);
+    color:var(--forest);
+    font-family:'Nunito', sans-serif;
+    min-width:210px;
+  }
+  .leaflet-popup-tip { background:#fff; }
+  .leaflet-popup-close-button { color:var(--canopy)!important; font-size:18px!important; top:6px!important; right:8px!important; font-weight:800!important; }
+  .leaflet-popup-content { margin:14px 16px 12px; }
+
+  .popup-name { font-family:'Fredoka One',cursive; font-size:15px; color:var(--forest); margin-bottom:2px; }
+  .popup-loc  { font-size:9px; color:var(--moss); margin-bottom:7px; font-weight:700; letter-spacing:0.8px; text-transform:uppercase; }
+  .status-badge {
+    display:inline-block; padding:3px 10px; border-radius:20px;
+    font-size:9px; font-weight:800; letter-spacing:1px; margin-bottom:8px;
+  }
+  .status-breeding { background:var(--amber-lt); color:#8a5c00; border:1.5px solid var(--amber); }
+  .status-occupied { background:#E8F5E9; color:var(--canopy); border:1.5px solid var(--moss); }
+  .status-mixed    { background:#E8F5E9; color:var(--forest); border:1.5px solid var(--leaf); }
+  .popup-row { display:flex; justify-content:space-between; margin:4px 0; color:#444; font-size:11px; }
+  .popup-row span:last-child { font-weight:800; color:var(--forest); }
+  .popup-divider { border:none; border-top:1.5px solid var(--mist); margin:8px 0; }
+  .popup-open-btn {
+    width:100%; padding:9px; margin-top:6px;
+    background:linear-gradient(135deg, var(--canopy), var(--leaf));
+    border:none; border-radius:10px; color:#fff;
+    font-family:'Nunito',sans-serif; font-size:11px; font-weight:800;
+    cursor:pointer; letter-spacing:0.5px;
+  }
+  .popup-open-btn:hover { opacity:0.9; }
+
+  /* ── BOTTOM PANEL ── */
+  #bottom-panel {
+    flex-shrink:0;
+    max-height:0; overflow:hidden;
+    transition:max-height 0.4s ease, opacity 0.3s ease;
+    opacity:0; background:var(--panel-bg);
+    border-top:3px solid var(--leaf);
+  }
+  #bottom-panel.open {
+    max-height:55vh; overflow-y:auto; opacity:1;
+  }
+  .bp-header {
+    background:linear-gradient(135deg, var(--forest), var(--canopy));
+    padding:12px 16px; display:flex; align-items:center; justify-content:space-between;
+    position:sticky; top:0; z-index:10;
+  }
+  .bp-park-name {
+    font-family:'Fredoka One',cursive; font-size:18px; color:#fff;
+  }
+  .bp-close {
+    background:rgba(255,255,255,0.2); border:none; color:#fff;
+    font-size:18px; width:32px; height:32px; border-radius:50%;
+    cursor:pointer; font-weight:800; display:flex; align-items:center; justify-content:center;
+  }
+  .bp-stats {
+    display:flex; gap:8px; padding:12px 14px;
+    background:var(--parchment); border-bottom:1.5px solid var(--mist);
+  }
+  .bp-stat {
+    flex:1; background:#fff; border:1.5px solid var(--mist);
+    border-radius:12px; padding:10px 8px; text-align:center;
+  }
+  .bp-stat-num { font-family:'Fredoka One',cursive; font-size:24px; color:var(--canopy); line-height:1; }
+  .bp-stat-label { font-size:10px; color:#666; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; margin-top:3px; }
+
+  .bp-section { padding:12px 14px 4px; }
+  .bp-section-title {
+    font-family:'Fredoka One',cursive; font-size:15px; color:var(--forest);
+    margin-bottom:10px; display:flex; align-items:center; gap:8px;
+  }
+  .bp-live-tag {
+    font-size:9px; background:#E8F5E9; color:var(--leaf);
+    border:1.5px solid var(--mist); padding:2px 8px;
+    border-radius:10px; font-family:'Nunito',sans-serif; font-weight:800;
+  }
+
+  /* Villa chips */
+  .villa-chips { display:flex; flex-wrap:wrap; gap:7px; margin-bottom:14px; }
+  .villa-chip {
+    padding:6px 12px; border-radius:20px;
+    font-size:12px; font-weight:800; display:flex; align-items:center; gap:5px;
+  }
+  .chip-breeding { background:var(--amber-lt); color:#7a5000; border:1.5px solid var(--amber); }
+  .chip-occupied { background:#E8F5E9; color:var(--canopy); border:1.5px solid var(--moss); }
+  .chip-empty    { background:#f5f5f5; color:#888; border:1.5px solid #ddd; }
+
+  /* Bulletin posts */
+  .bulletin-post {
+    background:#fff; border-radius:14px;
+    border:1.5px solid var(--mist); padding:12px 14px;
+    margin-bottom:10px; position:relative;
+  }
+  .bulletin-post::before {
+    content:''; position:absolute; left:0; top:12px; bottom:12px;
+    width:4px; background:var(--moss); border-radius:4px;
+  }
+  .bp-post-user { font-size:12px; font-weight:800; color:var(--canopy); margin-bottom:4px; }
+  .bp-post-text {
+    font-size:14px; color:#333; line-height:1.5;
+    font-family:'Nunito', sans-serif; font-weight:600;
+  }
+  .bp-post-meta { font-size:11px; color:#999; margin-top:6px; display:flex; align-items:center; gap:8px; }
+  .bp-post-tag {
+    background:var(--amber-lt); color:#7a5000;
+    font-size:10px; font-weight:800; padding:2px 8px; border-radius:8px;
+  }
+
+  /* ── STATUS BAR ── */
+  #statusbar {
+    background:var(--forest); border-top:1px solid rgba(255,255,255,0.1);
+    padding:6px 14px; display:flex; justify-content:space-between;
+    align-items:center; flex-shrink:0; font-size:9px; letter-spacing:0.5px; font-weight:800;
+  }
+  .stat-item { display:flex; align-items:center; gap:4px; color:var(--mist); }
+  .stat-value { color:#fff; font-weight:800; }
+
+  /* ── LEGEND ── */
+  #legend {
+    position:absolute; top:10px; right:10px; z-index:1000;
+    background:rgba(255,255,255,0.94); border:1.5px solid var(--mist);
+    border-radius:10px; padding:9px 12px; font-size:10px;
+  }
+  .legend-title { color:var(--canopy); font-size:8px; font-weight:800; letter-spacing:1.5px; margin-bottom:5px; text-transform:uppercase; }
+  .legend-row { display:flex; align-items:center; gap:6px; margin:4px 0; color:var(--forest); font-weight:700; }
+  .legend-dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+
+  /* ── CUSTOM MARKER ── */
+  .villa-marker {
+    width:40px; height:40px; border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+    font-size:20px; border:3px solid transparent;
+    box-shadow:0 3px 10px rgba(0,0,0,0.3);
+    cursor:pointer; position:relative; transition:transform 0.15s;
+  }
+  .villa-marker:hover { transform:scale(1.12); }
+  .marker-breeding { background:#fff8e1; border-color:var(--amber); box-shadow:0 0 14px #e9a31966,0 3px 10px rgba(0,0,0,0.2); }
+  .marker-occupied { background:#E8F5E9; border-color:var(--leaf); box-shadow:0 0 12px #40916c55,0 3px 10px rgba(0,0,0,0.2); }
+  .marker-mixed    { background:#E8F5E9; border-color:var(--canopy); box-shadow:0 0 12px #2d6a4f55,0 3px 10px rgba(0,0,0,0.2); }
+  .marker-count {
+    position:absolute; top:-5px; right:-5px;
+    background:var(--amber); color:var(--forest);
+    font-size:9px; font-weight:800;
+    width:17px; height:17px; border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+    font-family:'Nunito',sans-serif; border:2px solid #fff;
+  }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div id="header">
+  <div>
+    <div class="header-title">🌍 Eggcelsiur Network Map</div>
+    <div class="header-subtitle">Singapore Eastern Corridor · 12 Villas Deployed</div>
+  </div>
+  <div class="network-status">
+    <div class="pulse-dot"></div>
+    3 Parks Live
+  </div>
+</div>
+
+<!-- MAP -->
+<div id="map-wrapper">
+  <div id="map"></div>
+
+  <div id="legend">
+    <div class="legend-title">Villa Status</div>
+    <div class="legend-row"><div class="legend-dot" style="background:var(--amber)"></div> Active Breeding</div>
+    <div class="legend-row"><div class="legend-dot" style="background:var(--leaf)"></div> Occupied</div>
+    <div class="legend-row"><div class="legend-dot" style="background:#ccc"></div> Empty</div>
+  </div>
+</div>
+
+<!-- BOTTOM PANEL (slides up when park tapped) -->
+<div id="bottom-panel">
+  <div class="bp-header">
+    <div class="bp-park-name" id="bp-park-name">Park Name</div>
+    <button class="bp-close" onclick="closePanel()">✕</button>
+  </div>
+  <div class="bp-stats" id="bp-stats"></div>
+  <div class="bp-section">
+    <div class="bp-section-title">🏡 Villa Status</div>
+    <div class="villa-chips" id="villa-chips"></div>
+    <div class="bp-section-title">
+      📋 Community Bulletin Board
+      <span class="bp-live-tag">LIVE</span>
+    </div>
+    <div id="bulletin-posts"></div>
+  </div>
+</div>
+
+<!-- STATUS BAR -->
+<div id="statusbar">
+  <div class="stat-item">🏡 Villas: <span class="stat-value">12</span></div>
+  <div class="stat-item">🟢 Active: <span class="stat-value">8</span></div>
+  <div class="stat-item">🥚 Breeding: <span class="stat-value">5</span></div>
+  <div class="stat-item">👁 Sightings: <span class="stat-value">37</span></div>
+</div>
+
+<script>
+// ── MAP INIT ──
+const map = L.map('map', {
+  center: [1.36, 103.94],
+  zoom: 12,
+  zoomControl: true,
+  attributionControl: false
+});
+
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  maxZoom: 18
+}).addTo(map);
+
+L.control.attribution({ position:'bottomleft', prefix:'© OpenStreetMap contributors' }).addTo(map);
+
+// ── PARK DATA ──
+const parks = [
+  {
+    id:'punggol',
+    name:'Punggol Waterway Park',
+    // Punggol Point area, waterway park entry
+    lat:1.4119, lng:103.9083,
+    emoji:'🦆',
+    markerClass:'marker-mixed',
+    statusClass:'status-mixed',
+    statusText:'MIXED — 3 ACTIVE',
+    villas:4, active:3, sightings:12,
+    villaList:[
+      { state:'breeding', label:'🟡 PWP-01', note:'BREEDING' },
+      { state:'occupied', label:'🟢 PWP-02', note:'OCCUPIED' },
+      { state:'occupied', label:'🟢 PWP-03', note:'OCCUPIED' },
+      { state:'empty',    label:'⚪ PWP-04', note:'EMPTY' }
+    ],
+    bulletin:[
+      { user:'NatureLover_SG', text:'Olive-backed Sunbird pair building a nest near Villa PWP-01! Spotted them carrying fibres for about 20 minutes. So exciting! 🌟', time:'2h ago', tag:'New Resident' },
+      { user:'BirdwatcherAmy', text:'Blue-eared Kingfisher spotted hunting at the waterway edge near the wooden bridge. The blue and orange colours are stunning! 🎣', time:'5h ago', tag:'Rare Sighting' },
+      { user:'ParkRanger_NParks', text:'Villa PWP-03 confirmed occupied — Oriental Pied Hornbill pair confirmed after camera review. Monitoring cycle has begun.', time:'1d ago', tag:'Official' }
+    ]
+  },
+  {
+    id:'bedok',
+    name:'Bedok Reservoir Park',
+    // Bedok Reservoir park main entry, near reservoir edge
+    lat:1.3411, lng:103.9275,
+    emoji:'🦅',
+    markerClass:'marker-breeding',
+    statusClass:'status-breeding',
+    statusText:'ACTIVE BREEDING',
+    villas:4, active:2, sightings:8,
+    villaList:[
+      { state:'breeding', label:'🟡 BRP-01', note:'BREEDING' },
+      { state:'occupied', label:'🟢 BRP-02', note:'OCCUPIED' },
+      { state:'empty',    label:'⚪ BRP-03', note:'EMPTY' },
+      { state:'empty',    label:'⚪ BRP-04', note:'EMPTY' }
+    ],
+    bulletin:[
+      { user:'EagleSpotter', text:'White-bellied Sea Eagle circled above the reservoir for over 20 minutes! Made 3 low passes directly above Villa BRP-01. Absolutely breathtaking. 🦅', time:'3h ago', tag:'Rare Sighting' },
+      { user:'FamilyHiker_SG', text:'Brought my kids to see the nest at BRP-01. We checked the sensor data on the app together and the eggs are already on Day 11! My daughter was so amazed. 🥚', time:'1d ago', tag:'Family Visit' }
+    ]
+  },
+  {
+    id:'changi',
+    name:'Changi Coastal Walk',
+    // Park entry point LEFT of Changi Sailing Club — near Nicoll Drive / coastal path start
+    lat:1.3921096668050532, lng:103.98051960301125,
+    emoji:'🦉',
+    markerClass:'marker-breeding',
+    statusClass:'status-breeding',
+    statusText:'ACTIVE BREEDING',
+    villas:4, active:3, sightings:17,
+    villaList:[
+      { state:'breeding', label:'🟡 CCW-01', note:'BREEDING' },
+      { state:'breeding', label:'🟡 CCW-02', note:'BREEDING' },
+      { state:'occupied', label:'🟢 CCW-03', note:'OCCUPIED' },
+      { state:'empty',    label:'⚪ CCW-04', note:'EMPTY' }
+    ],
+    bulletin:[
+      { user:'OwlWatcher_Changi', text:'Buffy Fish Owl spotted near Villa CCW-02 at dusk again! This is the third night in a row at exactly the same spot. This stretch of the coastal walk is incredible for owls. 🦉', time:'1h ago', tag:'Rare Sighting' },
+      { user:'BirderPro_SG', text:'Brahminy Kite pair actively nesting very close to Villa CCW-01. One of the best spots in all of Singapore right now for raptor watching!', time:'4h ago', tag:'Nesting' },
+      { user:'CyclistBirder', text:'Was cycling the coastal trail this morning and spotted a Straw-headed Bulbul near the mangrove section. Critically endangered species! Please log if you see it too. 🌟', time:'8h ago', tag:'Rare Sighting' }
+    ]
+  }
+];
+
+// ── ICON FACTORY ──
+function makeIcon(p) {
+  const html = `
+    <div class="villa-marker ${p.markerClass}">
+      ${p.emoji}
+      <div class="marker-count">${p.active}</div>
+    </div>`;
+  return L.divIcon({ html, className:'', iconSize:[40,40], iconAnchor:[20,20], popupAnchor:[0,-22] });
+}
+
+// ── POPUP HTML (compact — directs to panel) ──
+function popupHtml(p) {
+  return `
+    <div class="popup-name">${p.emoji} ${p.name}</div>
+    <div class="popup-loc">Villa Eggcelsiur Network Node</div>
+    <div class="status-badge ${p.statusClass}">${p.statusText}</div>
+    <div class="popup-row"><span>🏡 Villas Deployed</span><span>${p.villas}</span></div>
+    <div class="popup-row"><span>🟢 Active Villas</span><span>${p.active}</span></div>
+    <div class="popup-row"><span>👁 Total Sightings</span><span>${p.sightings}</span></div>
+    <button class="popup-open-btn" onclick="openPanel('${p.id}')">
+      📋 Open Bulletin Board ↓
+    </button>`;
+}
+
+// ── PLACE MARKERS ──
+parks.forEach(p => {
+  const marker = L.marker([p.lat, p.lng], { icon:makeIcon(p) }).addTo(map);
+  marker.bindPopup(popupHtml(p), { maxWidth:240 });
+  // also open panel on marker click
+  marker.on('click', () => openPanel(p.id));
+});
+
+// ── NETWORK LINES ──
+L.polyline(parks.map(p => [p.lat, p.lng]), {
+  color:'#40916C', weight:2, opacity:0.4, dashArray:'7,9'
+}).addTo(map);
+
+// ── BOTTOM PANEL ──
+function openPanel(id) {
+  const p = parks.find(x => x.id === id);
+  if (!p) return;
+
+  document.getElementById('bp-park-name').textContent = p.emoji + '  ' + p.name;
+
+  document.getElementById('bp-stats').innerHTML = `
+    <div class="bp-stat"><div class="bp-stat-num">${p.villas}</div><div class="bp-stat-label">Villas</div></div>
+    <div class="bp-stat"><div class="bp-stat-num">${p.active}</div><div class="bp-stat-label">Active</div></div>
+    <div class="bp-stat"><div class="bp-stat-num">${p.sightings}</div><div class="bp-stat-label">Sightings</div></div>`;
+
+  document.getElementById('villa-chips').innerHTML = p.villaList.map(v =>
+    `<div class="villa-chip chip-${v.state}">${v.label} <span style="font-weight:600;opacity:0.7">${v.note}</span></div>`
+  ).join('');
+
+  document.getElementById('bulletin-posts').innerHTML = p.bulletin.map(b => `
+    <div class="bulletin-post">
+      <div class="bp-post-user">@${b.user}</div>
+      <div class="bp-post-text">${b.text}</div>
+      <div class="bp-post-meta">
+        <span>${b.time}</span>
+        <span class="bp-post-tag">${b.tag}</span>
+      </div>
+    </div>`).join('');
+
+  document.getElementById('bottom-panel').classList.add('open');
+  // shrink map slightly to show panel
+  document.getElementById('map-wrapper').style.flex = '0 0 45vh';
+}
+
+function closePanel() {
+  document.getElementById('bottom-panel').classList.remove('open');
+  document.getElementById('map-wrapper').style.flex = '1';
+}
+
+function goBack() {
+  try { AppInventor.setWebViewString("BACK:MAIN"); }
+  catch(e) { alert("← Back to Main Dashboard"); }
+}
+</script>
+</body>
+</html>
