@@ -176,6 +176,23 @@
   .stat-item { display:flex; align-items:center; gap:4px; color:var(--mist); }
   .stat-value { color:#fff; font-weight:800; }
 
+  /* ── ALERT STATION ── */
+  .alert-marker {
+    background:#fff3cd; border:2.5px solid #E9A319;
+    border-radius:50%; width:38px; height:38px;
+    display:flex; align-items:center; justify-content:center;
+    font-size:18px; box-shadow:0 0 10px rgba(233,163,25,0.5);
+    animation:alertpulse 1.5s ease-in-out infinite;
+  }
+  @keyframes alertpulse { 0%,100%{box-shadow:0 0 6px rgba(233,163,25,0.4)} 50%{box-shadow:0 0 16px rgba(233,163,25,0.9)} }
+
+  .score-bar-wrap { margin:6px 0 10px; }
+  .score-bar-label { font-size:10px; font-weight:800; color:#555; margin-bottom:3px; display:flex; justify-content:space-between; }
+  .score-bar-track { background:#eee; border-radius:6px; height:10px; overflow:hidden; }
+  .score-bar-fill { height:100%; border-radius:6px; background:linear-gradient(90deg,#40916C,#E9A319); transition:width 0.6s ease; }
+
+  .alert-badge { background:#fff3cd; color:#7a5000; border:1.5px solid #E9A319; }
+
   /* ── LEGEND ── */
   #legend {
     position:absolute; top:10px; right:10px; z-index:1000;
@@ -341,8 +358,78 @@ const parks = [
       { user:'BirderPro_SG', text:'Brahminy Kite pair actively nesting very close to Villa CCW-01. One of the best spots in all of Singapore right now for raptor watching!', time:'4h ago', tag:'Nesting' },
       { user:'CyclistBirder', text:'Was cycling the coastal trail this morning and spotted a Straw-headed Bulbul near the mangrove section. Critically endangered species! Please log if you see it too. 🌟', time:'8h ago', tag:'Rare Sighting' }
     ]
+  },
+  {
+    id:'gardensbay',
+    name:'Gardens by the Bay',
+    lat:1.2838, lng:103.8608,
+    emoji:'🌸',
+    markerClass:'marker-occupied',
+    statusClass:'status-occupied',
+    statusText:'ACTIVE — 3 OCCUPIED',
+    villas:4, active:3, sightings:11,
+    villaList:[
+      { state:'occupied', label:'🟢 GBB-01', note:'OCCUPIED' },
+      { state:'occupied', label:'🟢 GBB-02', note:'OCCUPIED' },
+      { state:'breeding', label:'🟡 GBB-03', note:'ALERT ⚠️' },
+      { state:'empty',    label:'⚪ GBB-04', note:'EMPTY' }
+    ],
+    bulletin:[
+      { user:'Yin_EggTelligent', text:'Olive-backed Sunbird drinking nectar from a frangipani tree near the Flower Dome entrance! It hovered for almost a minute — the colours were so beautiful in the sunlight. 🌸', time:'Yesterday', tag:'Rare Sighting' },
+      { user:'GardenRanger_GBTB', text:'Plantain Squirrel at Villa GBB-03 has not been detected for 3 days — motion and sound sensors both dropping. Welfare check has been scheduled for tomorrow morning.', time:'6h ago', tag:'Alert' },
+      { user:'NectarWatcher_SG', text:'Second sunbird sighting this week near the Supertrees! Olive-backed Sunbird pair — the male has that stunning purple throat patch. Gardens by the Bay is becoming a real sunbird hotspot. 🌺', time:'2d ago', tag:'New Resident' }
+    ]
   }
 ];
+
+// ── ALERT STATION DATA ──
+const alertStation = {
+  id:'alert-gbtb',
+  lat:1.2800, lng:103.8660,
+  name:'Gardens by the Bay — Villa GBB-03',
+  park:'Gardens by the Bay',
+  resident:'🐿️ Plantain Squirrel',
+  villaCode:'GBB-03',
+  score:78,
+  scoreBreakdown:[
+    { label:'Temperature 🌡️', value:85, trend:'stable' },
+    { label:'Humidity 💧',    value:88, trend:'stable' },
+    { label:'Motion 🏃',      value:41, trend:'down' },
+    { label:'Sound 🔊',       value:38, trend:'down' }
+  ],
+  diagnosis:'Motion and sound have been dropping steadily for 3 days — from 74% down to 38%. The Plantain Squirrel may be unwell, resting too much, or may have left the nest.',
+  alert:'A welfare check visit to Villa GBB-03 is recommended soon.',
+  lastSeen:'Plantain Squirrel — 3 days ago'
+};
+
+// ── ALERT STATION MARKER ──
+const alertIcon = L.divIcon({
+  html:`<div class="alert-marker">⚠️</div>`,
+  className:'', iconSize:[38,38], iconAnchor:[19,19], popupAnchor:[0,-22]
+});
+
+const alertPopupHtml = `
+  <div class="popup-name">⚠️ Gardens by the Bay</div>
+  <div class="popup-name" style="font-size:12px;margin-bottom:4px">Villa GBB-03</div>
+  <div class="popup-loc">Resident: ${alertStation.resident} · Villa ${alertStation.villaCode}</div>
+  <div class="status-badge alert-badge">⚠️ WELFARE ALERT — SCORE ${alertStation.score}/100</div>
+  <div style="font-size:11px;font-weight:800;color:#7a5000;margin:6px 0 4px">📉 What the sensors are saying:</div>
+  ${alertStation.scoreBreakdown.map(s=>`
+  <div class="score-bar-wrap">
+    <div class="score-bar-label">
+      <span>${s.label} ${s.trend==='down'?'↓':'→'}</span>
+      <span style="color:${s.trend==='down'?'#c0392b':'#2d6a4f'}">${s.value}%</span>
+    </div>
+    <div class="score-bar-track"><div class="score-bar-fill" style="width:${s.value}%;background:${s.trend==='down'?'linear-gradient(90deg,#e74c3c,#e9a319)':'linear-gradient(90deg,#40916C,#52B788)'}"></div></div>
+  </div>`).join('')}
+  <hr style="border:none;border-top:1.5px solid #e0f0e0;margin:8px 0">
+  <div style="font-size:11px;color:#555;line-height:1.6;margin-bottom:6px">🔍 <b>Diagnosis:</b> ${alertStation.diagnosis}</div>
+  <div style="font-size:11px;color:#7a5000;background:#fff8e1;border-radius:8px;padding:6px 8px;border:1px solid #E9A319">📋 ${alertStation.alert}</div>
+  <div class="popup-row" style="margin-top:8px"><span>👁 Last seen</span><span>${alertStation.lastSeen}</span></div>`;
+
+L.marker([alertStation.lat, alertStation.lng], { icon:alertIcon })
+  .addTo(map)
+  .bindPopup(alertPopupHtml, { maxWidth:260 });
 
 // ── ICON FACTORY ──
 function makeIcon(p) {
